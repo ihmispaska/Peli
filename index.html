@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="fi">
+<head>
+<meta charset="UTF-8">
+<title>Auto Runner</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+body{
+    margin:0;
+    overflow:hidden;
+    font-family:Arial;
+    touch-action:none;
+}
+
+#game{
+    position:relative;
+    width:100vw;
+    height:100vh;
+    background:linear-gradient(#001, #000);
+    display:none;
+}
+
+/* Tie */
+.road{
+    position:absolute;
+    width:100%;
+    height:100vh;
+    background:linear-gradient(#222,#444);
+}
+
+/* Auto */
+.car{
+    position:absolute;
+    width:60px;
+    height:110px;
+    bottom:80px;
+    border-radius:15px;
+    background:linear-gradient(red,darkred);
+}
+
+/* Ikkuna */
+.car::before{
+    content:"";
+    position:absolute;
+    width:40px;
+    height:30px;
+    background:#88c;
+    top:15px;
+    left:10px;
+    border-radius:8px;
+}
+
+/* Renkaat */
+.car::after{
+    content:"";
+    position:absolute;
+    width:60px;
+    height:15px;
+    background:black;
+    bottom:-10px;
+    left:0;
+    border-radius:10px;
+}
+
+.obstacle{
+    position:absolute;
+    width:60px;
+    height:100px;
+    top:-120px;
+    border-radius:12px;
+}
+
+.obstacle.type1{ background:yellow; }
+.obstacle.type2{ background:lime; }
+.obstacle.type3{ background:orange; }
+
+.coin{
+    position:absolute;
+    width:35px;
+    height:35px;
+    background:gold;
+    border-radius:50%;
+    top:-100px;
+}
+
+.screen{
+    position:absolute;
+    width:100vw;
+    height:100vh;
+    display:flex;
+    flex-direction:column;
+    justify-content:center;
+    align-items:center;
+    color:white;
+    background:black;
+}
+
+button{
+    padding:15px 35px;
+    font-size:22px;
+    border:none;
+    border-radius:15px;
+    margin-top:20px;
+}
+</style>
+</head>
+
+<body>
+
+<div id="startScreen" class="screen">
+    <h1>Auto Runner</h1>
+    <button onclick="startGame()">Aloita peli</button>
+</div>
+
+<div id="game">
+    <div class="road"></div>
+    <div id="car" class="car"></div>
+    <div id="score" style="position:absolute;top:10px;left:10px;color:white;font-size:22px">0</div>
+</div>
+
+<div id="gameOverScreen" class="screen" style="display:none">
+    <h1>Game Over</h1>
+    <p id="finalScore"></p>
+    <button onclick="location.reload()">Pelaa uudestaan</button>
+</div>
+
+<script>
+
+const game = document.getElementById("game");
+const car = document.getElementById("car");
+const scoreText = document.getElementById("score");
+const startScreen = document.getElementById("startScreen");
+const gameOverScreen = document.getElementById("gameOverScreen");
+const finalScore = document.getElementById("finalScore");
+
+/* 4 kaistaa */
+let lanes = [
+    window.innerWidth*0.1,
+    window.innerWidth*0.35,
+    window.innerWidth*0.6,
+    window.innerWidth*0.85 - 60
+];
+
+let lane = 1;
+let score = 0;
+let gameRunning = false;
+let obstacleSpeed = 7;
+
+function startGame(){
+    startScreen.style.display = "none";
+    game.style.display = "block";
+    gameRunning = true;
+
+    car.style.left = lanes[lane]+"px";
+
+    setInterval(()=>{
+        spawnObstacle();
+    },900);
+
+    setInterval(()=>{
+        spawnCoin();
+    },2200); // vähemmän kolikoita
+}
+
+/* Ohjaus */
+let touchStartX = 0;
+
+game.addEventListener("touchstart", e=>{
+    touchStartX = e.touches[0].clientX;
+});
+
+game.addEventListener("touchend", e=>{
+    if(!gameRunning) return;
+
+    let touchEndX = e.changedTouches[0].clientX;
+
+    if(touchEndX < touchStartX - 30){
+        lane = Math.max(0,lane-1);
+    }
+
+    if(touchEndX > touchStartX + 30){
+        lane = Math.min(3,lane+1);
+    }
+
+    car.style.left = lanes[lane]+"px";
+});
+
+/* Esteet */
+function spawnObstacle(){
+    if(!gameRunning) return;
+
+    const obs = document.createElement("div");
+    obs.classList.add("obstacle");
+
+    let type = Math.floor(Math.random()*3)+1;
+    obs.classList.add("type"+type);
+
+    let obsLane = Math.floor(Math.random()*4);
+    obs.style.left = lanes[obsLane]+"px";
+
+    game.appendChild(obs);
+
+    let pos = -120;
+
+    function move(){
+        if(!gameRunning) return;
+
+        pos += obstacleSpeed;
+        obs.style.top = pos+"px";
+
+        checkCollision(obs);
+
+        if(pos > window.innerHeight){
+            obs.remove();
+            score++;
+            scoreText.innerText = score;
+        }else{
+            requestAnimationFrame(move);
+        }
+    }
+
+    move();
+}
+
+/* Kolikot */
+function spawnCoin(){
+    if(!gameRunning) return;
+
+    const coin = document.createElement("div");
+    coin.classList.add("coin");
+
+    let laneCoin = Math.floor(Math.random()*4);
+    coin.style.left = lanes[laneCoin]+"px";
+
+    /* Ei auton sisään */
+    let safeTop = Math.random()* -200 - 50;
+    coin.style.top = safeTop+"px";
+
+    game.appendChild(coin);
+
+    let pos = safeTop;
+
+    function move(){
+        if(!gameRunning) return;
+
+        pos += obstacleSpeed;
+        coin.style.top = pos+"px";
+
+        let carRect = car.getBoundingClientRect();
+        let coinRect = coin.getBoundingClientRect();
+
+        if(
+            carRect.x < coinRect.x + coinRect.width &&
+            carRect.x + carRect.width > coinRect.x &&
+            carRect.y < coinRect.y + coinRect.height &&
+            carRect.height + carRect.y > coinRect.y
+        ){
+            score += 5;
+            scoreText.innerText = score;
+            coin.remove();
+            return;
+        }
+
+        if(pos > window.innerHeight){
+            coin.remove();
+        }else{
+            requestAnimationFrame(move);
+        }
+    }
+
+    move();
+}
+
+/* Törmäys */
+function checkCollision(obs){
+    let carRect = car.getBoundingClientRect();
+    let obsRect = obs.getBoundingClientRect();
+
+    if(
+        carRect.x < obsRect.x + obsRect.width &&
+        carRect.x + carRect.width > obsRect.x &&
+        carRect.y < obsRect.y + obsRect.height &&
+        carRect.height + carRect.y > obsRect.y
+    ){
+        gameRunning = false;
+        finalScore.innerText = "Pisteet: "+score;
+
+        game.style.display = "none";
+        gameOverScreen.style.display = "flex";
+    }
+}
+
+</script>
+
+</body>
+</html>
